@@ -250,13 +250,13 @@ jobs:
                           boolean surface = false;
                           boolean hdr10 = false;
 
-                          for (int p : caps.profileLevels) {
+                          for (MediaCodecInfo.CodecProfileLevel p : caps.profileLevels) {
 
                               if (p == MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10) {
                                   main10 = true;
                               }
 
-                              if (p ==
+                              if (p.profile ==
                                   MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10HDR10) {
                                   hdr10 = true;
                               }
