@@ -1,37 +1,78 @@
 name: Build SDR2HDR Akari TEST 2
 
 on:
-  workflow_dispatch:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   build:
+    name: Build APK
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+
+      # ============================================================
+      # 1. Ambil repository
+      # ============================================================
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK
+
+      # ============================================================
+      # 2. Java 17
+      # ============================================================
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Gradle
+
+      # ============================================================
+      # 3. Android SDK
+      # ============================================================
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+
+      # ============================================================
+      # 4. Pastikan Android SDK 35 tersedia
+      # ============================================================
+      - name: Install Android SDK packages
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+
+      # ============================================================
+      # 5. Gradle
+      # ============================================================
+      - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
+
+      # ============================================================
+      # 6. Buat Android project
+      # ============================================================
       - name: Create Android project
         shell: bash
         run: |
+
           set -e
+
+          echo "Creating Android project..."
 
           mkdir -p app/src/main/java/com/maafyaburik/sdr2hdr
           mkdir -p app/src/main/res/values
+
+
+          # ========================================================
+          # settings.gradle
+          # ========================================================
 
           cat > settings.gradle <<'EOF'
           pluginManagement {
@@ -44,6 +85,7 @@ jobs:
 
           dependencyResolutionManagement {
               repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+
               repositories {
                   google()
                   mavenCentral()
@@ -51,8 +93,14 @@ jobs:
           }
 
           rootProject.name = "SDR2HDR-Akari"
+
           include(":app")
           EOF
+
+
+          # ========================================================
+          # build.gradle
+          # ========================================================
 
           cat > build.gradle <<'EOF'
           plugins {
@@ -60,10 +108,21 @@ jobs:
           }
           EOF
 
+
+          # ========================================================
+          # gradle.properties
+          # ========================================================
+
           cat > gradle.properties <<'EOF'
           org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
           android.useAndroidX=true
+          android.nonTransitiveRClass=true
           EOF
+
+
+          # ========================================================
+          # app/build.gradle
+          # ========================================================
 
           cat > app/build.gradle <<'EOF'
           plugins {
@@ -71,41 +130,63 @@ jobs:
           }
 
           android {
+
               namespace 'com.maafyaburik.sdr2hdr'
+
               compileSdk 35
 
               defaultConfig {
+
                   applicationId 'com.maafyaburik.sdr2hdr'
+
                   minSdk 29
+
                   targetSdk 35
+
                   versionCode 2
+
                   versionName '0.2.0'
               }
           }
           EOF
 
+
+          # ========================================================
+          # AndroidManifest.xml
+          # ========================================================
+
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-              <uses-feature
-                  android:name="android.hardware.opengles.aep"
-                  android:required="false" />
+          <manifest
+              xmlns:android="http://schemas.android.com/apk/res/android">
 
               <application
-                  android:theme="@style/AppTheme"
-                  android:label="SDR2HDR Akari TEST 2"
+
                   android:allowBackup="false"
-                  android:supportsRtl="true">
+
+                  android:supportsRtl="true"
+
+                  android:label="SDR2HDR Akari TEST 2"
+
+                  android:theme="@style/AppTheme">
 
                   <activity
+
                       android:name=".MainActivity"
+
                       android:screenOrientation="portrait"
+
                       android:exported="true">
 
                       <intent-filter>
-                          <action android:name="android.intent.action.MAIN" />
-                          <category android:name="android.intent.category.LAUNCHER" />
+
+                          <action
+                              android:name="android.intent.action.MAIN" />
+
+                          <category
+                              android:name="android.intent.category.LAUNCHER" />
+
                       </intent-filter>
 
                   </activity>
@@ -115,8 +196,14 @@ jobs:
           </manifest>
           EOF
 
+
+          # ========================================================
+          # styles.xml
+          # ========================================================
+
           cat > app/src/main/res/values/styles.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
+
           <resources>
 
               <style
@@ -124,7 +211,9 @@ jobs:
                   parent="android:style/Theme.Material.Light.NoActionBar">
 
                   <item name="android:fontFamily">sans</item>
+
                   <item name="android:colorAccent">#6750A4</item>
+
                   <item name="android:navigationBarColor">#000000</item>
 
               </style>
@@ -132,255 +221,567 @@ jobs:
           </resources>
           EOF
 
+
+          # ========================================================
+          # MainActivity.java
+          # ========================================================
+
           cat > app/src/main/java/com/maafyaburik/sdr2hdr/MainActivity.java <<'EOF'
           package com.maafyaburik.sdr2hdr;
 
           import android.app.Activity;
           import android.os.Bundle;
-          import android.os.Environment;
+
           import android.media.MediaCodec;
           import android.media.MediaCodecInfo;
           import android.media.MediaCodecList;
           import android.media.MediaFormat;
+
           import android.view.Surface;
+
           import android.widget.Button;
           import android.widget.LinearLayout;
           import android.widget.ScrollView;
           import android.widget.TextView;
 
-          import java.io.File;
-          import java.nio.ByteBuffer;
-
           public class MainActivity extends Activity {
 
               private TextView log;
 
+
               @Override
               protected void onCreate(Bundle state) {
+
                   super.onCreate(state);
 
-                  LinearLayout root = new LinearLayout(this);
-                  root.setOrientation(LinearLayout.VERTICAL);
-                  root.setPadding(32, 32, 32, 32);
 
-                  TextView title = new TextView(this);
-                  title.setText(
-                      "SDR2HDR Akari\\n" +
-                      "TEST 2 — HDR10 / PQ Encoder"
+                  LinearLayout root =
+                      new LinearLayout(this);
+
+                  root.setOrientation(
+                      LinearLayout.VERTICAL
                   );
+
+                  root.setPadding(
+                      32,
+                      32,
+                      32,
+                      32
+                  );
+
+
+                  TextView title =
+                      new TextView(this);
+
+                  title.setText(
+                      "SDR2HDR Akari\n" +
+                      "TEST 2 — HDR10 / PQ"
+                  );
+
                   title.setTextSize(24);
+
 
                   root.addView(title);
 
-                  Button check = new Button(this);
-                  check.setText("1. Cek HEVC Main10 / HDR");
+
+                  Button check =
+                      new Button(this);
+
+                  check.setText(
+                      "1. Cek HEVC Main10 / HDR"
+                  );
+
                   root.addView(check);
 
-                  Button test = new Button(this);
-                  test.setText("2. Tes Encoder HDR10");
+
+                  Button test =
+                      new Button(this);
+
+                  test.setText(
+                      "2. Tes Encoder HDR10 / PQ"
+                  );
+
                   root.addView(test);
 
-                  log = new TextView(this);
+
+                  log =
+                      new TextView(this);
+
                   log.setTextSize(14);
 
-                  ScrollView scroll = new ScrollView(this);
+
+                  ScrollView scroll =
+                      new ScrollView(this);
+
                   scroll.addView(log);
+
 
                   root.addView(
                       scroll,
                       new LinearLayout.LayoutParams(
-                          -1,
+                          LinearLayout.LayoutParams.MATCH_PARENT,
                           0,
                           1
                       )
                   );
 
+
                   setContentView(root);
 
-                  check.setOnClickListener(v -> scan());
 
-                  test.setOnClickListener(v -> {
-                      new Thread(this::testEncoder).start();
-                  });
+                  check.setOnClickListener(
+                      v -> scanEncoders()
+                  );
+
+
+                  test.setOnClickListener(
+                      v -> {
+
+                          new Thread(
+                              this::testEncoder
+                          ).start();
+
+                      }
+                  );
               }
 
-              private void println(String s) {
-                  runOnUiThread(() -> {
-                      log.append(s + "\\n");
-                  });
+
+              private void println(
+                  String text
+              ) {
+
+                  runOnUiThread(
+                      () -> log.append(
+                          text + "\n"
+                      )
+                  );
               }
 
-              private void scan() {
 
-                  log.setText("");
+              // ====================================================
+              // Cari HEVC encoder
+              // ====================================================
 
-                  println("=== SDR2HDR AKARI TEST 2 ===");
-                  println("Android API: " + android.os.Build.VERSION.SDK_INT);
-                  println("Device: " + android.os.Build.MODEL);
+              private void scanEncoders() {
+
+                  runOnUiThread(
+                      () -> log.setText("")
+                  );
+
+
+                  println(
+                      "================================"
+                  );
+
+                  println(
+                      "SDR2HDR AKARI TEST 2"
+                  );
+
+                  println(
+                      "================================"
+                  );
+
+                  println(
+                      "Android API: " +
+                      android.os.Build.VERSION.SDK_INT
+                  );
+
+                  println(
+                      "Device: " +
+                      android.os.Build.MANUFACTURER +
+                      " " +
+                      android.os.Build.MODEL
+                  );
+
                   println("");
 
-                  MediaCodecList list =
-                      new MediaCodecList(MediaCodecList.ALL_CODECS);
 
-                  boolean found = false;
+                  MediaCodecList codecList =
+                      new MediaCodecList(
+                          MediaCodecList.ALL_CODECS
+                      );
 
-                  for (MediaCodecInfo info : list.getCodecInfos()) {
+
+                  boolean found =
+                      false;
+
+
+                  for (
+                      MediaCodecInfo info :
+                      codecList.getCodecInfos()
+                  ) {
 
                       if (!info.isEncoder()) {
                           continue;
                       }
 
-                      String[] types = info.getSupportedTypes();
 
-                      for (String type : types) {
+                      for (
+                          String type :
+                          info.getSupportedTypes()
+                      ) {
 
-                          if (!"video/hevc".equalsIgnoreCase(type)) {
+                          if (
+                              !"video/hevc"
+                                  .equalsIgnoreCase(type)
+                          ) {
                               continue;
                           }
 
+
                           found = true;
 
-                          println("HEVC encoder:");
-                          println(info.getName());
 
-                          MediaCodecInfo.CodecCapabilities caps =
-                              info.getCapabilitiesForType("video/hevc");
+                          println(
+                              "HEVC Encoder:"
+                          );
 
-                          boolean main10 = false;
-                          boolean surface = false;
-                          boolean hdr10 = false;
+                          println(
+                              info.getName()
+                          );
 
-                          for (MediaCodecInfo.CodecProfileLevel p : caps.profileLevels) {
 
-                              if (p == MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10) {
-                                  main10 = true;
+                          try {
+
+                              MediaCodecInfo.CodecCapabilities caps =
+                                  info.getCapabilitiesForType(
+                                      "video/hevc"
+                                  );
+
+
+                              boolean main10 =
+                                  false;
+
+                              boolean hdr10 =
+                                  false;
+
+                              boolean surface =
+                                  false;
+
+
+                              // IMPORTANT:
+                              // profileLevels berisi object
+                              // CodecProfileLevel.
+                              //
+                              // Harus menggunakan:
+                              // p.profile
+                              //
+
+                              for (
+                                  MediaCodecInfo.CodecProfileLevel p :
+                                  caps.profileLevels
+                              ) {
+
+                                  if (
+                                      p.profile ==
+                                      MediaCodecInfo
+                                          .CodecProfileLevel
+                                          .HEVCProfileMain10
+                                  ) {
+
+                                      main10 = true;
+                                  }
+
+
+                                  if (
+                                      p.profile ==
+                                      MediaCodecInfo
+                                          .CodecProfileLevel
+                                          .HEVCProfileMain10HDR10
+                                  ) {
+
+                                      hdr10 = true;
+                                  }
                               }
 
-                              if (p.profile ==
-                                  MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10HDR10) {
-                                  hdr10 = true;
+
+                              for (
+                                  int colorFormat :
+                                  caps.colorFormats
+                              ) {
+
+                                  if (
+                                      colorFormat ==
+                                      MediaCodecInfo
+                                          .CodecCapabilities
+                                          .COLOR_FormatSurface
+                                  ) {
+
+                                      surface = true;
+                                  }
                               }
-                          }
 
-                          for (int f : caps.colorFormats) {
 
-                              if (f ==
-                                  MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface) {
-                                  surface = true;
-                              }
-                          }
+                              println(
+                                  "Main10: " +
+                                  main10
+                              );
 
-                          println("Main10: " + main10);
-                          println("Main10 HDR10: " + hdr10);
-                          println("Surface input: " + surface);
+                              println(
+                                  "Main10 HDR10: " +
+                                  hdr10
+                              );
 
-                          if (android.os.Build.VERSION.SDK_INT >= 33) {
+                              println(
+                                  "Surface input: " +
+                                  surface
+                              );
 
-                              try {
 
-                                  boolean editing =
-                                      caps.isFeatureSupported(
-                                          MediaCodecInfo.CodecCapabilities
-                                              .FEATURE_HdrEditing
+                              if (
+                                  android.os.Build.VERSION.SDK_INT
+                                  >= 33
+                              ) {
+
+                                  try {
+
+                                      boolean hdrEditing =
+                                          caps.isFeatureSupported(
+                                              MediaCodecInfo
+                                                  .CodecCapabilities
+                                                  .FEATURE_HdrEditing
+                                          );
+
+
+                                      println(
+                                          "HDR editing feature: " +
+                                          hdrEditing
                                       );
 
-                                  println("HDR editing feature: " + editing);
+                                  } catch (
+                                      Throwable e
+                                  ) {
 
-                              } catch (Throwable e) {
-
-                                  println(
-                                      "HDR editing query failed: " +
-                                      e.getClass().getSimpleName()
-                                  );
+                                      println(
+                                          "HDR editing query failed"
+                                      );
+                                  }
                               }
+
+
+                          } catch (
+                              Throwable e
+                          ) {
+
+                              println(
+                                  "Capability error: " +
+                                  e.getMessage()
+                              );
                           }
+
 
                           println("");
                       }
                   }
 
+
                   if (!found) {
-                      println("ERROR: Tidak ada encoder HEVC.");
+
+                      println(
+                          "ERROR:"
+                      );
+
+                      println(
+                          "Tidak ditemukan HEVC encoder."
+                      );
+
+                  } else {
+
+                      println(
+                          "Scan selesai."
+                      );
                   }
               }
 
-              private MediaCodecInfo findEncoder() {
 
-                  MediaCodecList list =
-                      new MediaCodecList(MediaCodecList.ALL_CODECS);
+              // ====================================================
+              // Pilih encoder HEVC Main10 + Surface
+              // ====================================================
 
-                  for (MediaCodecInfo info : list.getCodecInfos()) {
+              private MediaCodecInfo findMain10Encoder() {
+
+                  MediaCodecList codecList =
+                      new MediaCodecList(
+                          MediaCodecList.ALL_CODECS
+                      );
+
+
+                  for (
+                      MediaCodecInfo info :
+                      codecList.getCodecInfos()
+                  ) {
 
                       if (!info.isEncoder()) {
                           continue;
                       }
 
-                      for (String type : info.getSupportedTypes()) {
 
-                          if (!"video/hevc".equalsIgnoreCase(type)) {
-                              continue;
-                          }
+                      boolean hevc =
+                          false;
 
-                          try {
 
-                              MediaCodecInfo.CodecCapabilities caps =
-                                  info.getCapabilitiesForType("video/hevc");
+                      for (
+                          String type :
+                          info.getSupportedTypes()
+                      ) {
 
-                              boolean main10 = false;
-                              boolean surface = false;
+                          if (
+                              "video/hevc"
+                                  .equalsIgnoreCase(type)
+                          ) {
 
-                              for (int p : caps.profileLevels) {
+                              hevc = true;
 
-                                  if (p ==
-                                      MediaCodecInfo.CodecProfileLevel
-                                          .HEVCProfileMain10) {
-                                      main10 = true;
-                                  }
-                              }
-
-                              for (int f : caps.colorFormats) {
-
-                                  if (f ==
-                                      MediaCodecInfo.CodecCapabilities
-                                          .COLOR_FormatSurface) {
-                                      surface = true;
-                                  }
-                              }
-
-                              if (main10 && surface) {
-                                  return info;
-                              }
-
-                          } catch (Throwable ignored) {
+                              break;
                           }
                       }
+
+
+                      if (!hevc) {
+                          continue;
+                      }
+
+
+                      try {
+
+                          MediaCodecInfo.CodecCapabilities caps =
+                              info.getCapabilitiesForType(
+                                  "video/hevc"
+                              );
+
+
+                          boolean main10 =
+                              false;
+
+                          boolean surface =
+                              false;
+
+
+                          for (
+                              MediaCodecInfo.CodecProfileLevel p :
+                              caps.profileLevels
+                          ) {
+
+                              if (
+                                  p.profile ==
+                                  MediaCodecInfo
+                                      .CodecProfileLevel
+                                      .HEVCProfileMain10
+                              ) {
+
+                                  main10 = true;
+
+                                  break;
+                              }
+                          }
+
+
+                          for (
+                              int colorFormat :
+                              caps.colorFormats
+                          ) {
+
+                              if (
+                                  colorFormat ==
+                                  MediaCodecInfo
+                                      .CodecCapabilities
+                                      .COLOR_FormatSurface
+                              ) {
+
+                                  surface = true;
+
+                                  break;
+                              }
+                          }
+
+
+                          if (
+                              main10 &&
+                              surface
+                          ) {
+
+                              return info;
+                          }
+
+
+                      } catch (
+                          Throwable ignored
+                      ) {
+                      }
                   }
+
 
                   return null;
               }
 
+
+              // ====================================================
+              // Test HDR10 / PQ encoder
+              // ====================================================
+
               private void testEncoder() {
 
                   println("");
-                  println("=== MULAI TES HDR10 ===");
 
-                  MediaCodec codec = null;
-                  Surface surface = null;
+                  println(
+                      "================================"
+                  );
+
+                  println(
+                      "TEST HDR10 / PQ DIMULAI"
+                  );
+
+                  println(
+                      "================================"
+                  );
+
+
+                  MediaCodec codec =
+                      null;
+
+                  Surface inputSurface =
+                      null;
+
 
                   try {
 
-                      MediaCodecInfo info = findEncoder();
+                      MediaCodecInfo encoder =
+                          findMain10Encoder();
 
-                      if (info == null) {
-                          println("GAGAL: HEVC Main10 + Surface tidak ditemukan.");
+
+                      if (encoder == null) {
+
+                          println(
+                              "GAGAL:"
+                          );
+
+                          println(
+                              "HEVC Main10 + Surface"
+                          );
+
+                          println(
+                              "tidak tersedia."
+                          );
+
                           return;
                       }
 
-                      println("Encoder:");
-                      println(info.getName());
 
-                      int width = 1280;
-                      int height = 720;
+                      println(
+                          "Encoder terpilih:"
+                      );
+
+                      println(
+                          encoder.getName()
+                      );
+
+
+                      int width =
+                          1280;
+
+                      int height =
+                          720;
+
 
                       MediaFormat format =
                           MediaFormat.createVideoFormat(
@@ -389,145 +790,348 @@ jobs:
                               height
                           );
 
+
+                      // Surface input
                       format.setInteger(
                           MediaFormat.KEY_COLOR_FORMAT,
-                          MediaCodecInfo.CodecCapabilities
+
+                          MediaCodecInfo
+                              .CodecCapabilities
                               .COLOR_FormatSurface
                       );
 
+
+                      // 12 Mbps
                       format.setInteger(
                           MediaFormat.KEY_BIT_RATE,
                           12000000
                       );
 
+
+                      // 30 FPS
                       format.setInteger(
                           MediaFormat.KEY_FRAME_RATE,
                           30
                       );
 
+
+                      // Keyframe setiap 1 detik
                       format.setInteger(
                           MediaFormat.KEY_I_FRAME_INTERVAL,
                           1
                       );
 
+
+                      // HEVC Main10
                       format.setInteger(
                           MediaFormat.KEY_PROFILE,
-                          MediaCodecInfo.CodecProfileLevel
+
+                          MediaCodecInfo
+                              .CodecProfileLevel
                               .HEVCProfileMain10
                       );
 
-                      if (android.os.Build.VERSION.SDK_INT >= 24) {
 
+                      // ==================================================
+                      // HDR10 / PQ
+                      // ==================================================
+
+                      if (
+                          android.os.Build.VERSION.SDK_INT
+                          >= 24
+                      ) {
+
+                          // BT.2020
                           format.setInteger(
                               MediaFormat.KEY_COLOR_STANDARD,
-                              MediaFormat.COLOR_STANDARD_BT2020
+
+                              MediaFormat
+                                  .COLOR_STANDARD_BT2020
                           );
 
+
+                          // Limited range
                           format.setInteger(
                               MediaFormat.KEY_COLOR_RANGE,
-                              MediaFormat.COLOR_RANGE_LIMITED
+
+                              MediaFormat
+                                  .COLOR_RANGE_LIMITED
                           );
 
+
+                          // SMPTE ST 2084 / PQ
                           format.setInteger(
                               MediaFormat.KEY_COLOR_TRANSFER,
-                              MediaFormat.COLOR_TRANSFER_ST2084
+
+                              MediaFormat
+                                  .COLOR_TRANSFER_ST2084
                           );
                       }
 
-                      if (android.os.Build.VERSION.SDK_INT >= 33) {
+
+                      // Android 13+
+                      if (
+                          android.os.Build.VERSION.SDK_INT
+                          >= 33
+                      ) {
 
                           try {
 
                               format.setFeatureEnabled(
-                                  MediaCodecInfo.CodecCapabilities
+                                  MediaCodecInfo
+                                      .CodecCapabilities
                                       .FEATURE_HdrEditing,
+
                                   true
                               );
 
-                          } catch (Throwable e) {
 
                               println(
-                                  "HDR editing feature tidak dapat diaktifkan."
+                                  "HDR editing feature: ENABLED"
+                              );
+
+                          } catch (
+                              Throwable e
+                          ) {
+
+                              println(
+                                  "HDR editing feature:"
+                              );
+
+                              println(
+                                  "tidak dapat diaktifkan"
                               );
                           }
                       }
 
-                      println("Resolusi: 1280x720");
-                      println("Profile: HEVC Main10");
-                      println("Color standard: BT.2020");
-                      println("Transfer: ST2084 / PQ");
-                      println("Mencoba configure encoder...");
+
+                      println("");
+
+                      println(
+                          "Resolution: 1280x720"
+                      );
+
+                      println(
+                          "Codec: HEVC"
+                      );
+
+                      println(
+                          "Profile: Main10"
+                      );
+
+                      println(
+                          "Color: BT.2020"
+                      );
+
+                      println(
+                          "Transfer: ST2084 / PQ"
+                      );
+
+                      println("");
+
+                      println(
+                          "Membuat MediaCodec..."
+                      );
+
 
                       codec =
-                          MediaCodec.createByCodecName(info.getName());
+                          MediaCodec.createByCodecName(
+                              encoder.getName()
+                          );
+
 
                       codec.configure(
                           format,
+
                           null,
+
                           null,
-                          MediaCodec.CONFIGURE_FLAG_ENCODE
+
+                          MediaCodec
+                              .CONFIGURE_FLAG_ENCODE
                       );
 
-                      surface = codec.createInputSurface();
+
+                      println(
+                          "configure() SUCCESS"
+                      );
+
+
+                      inputSurface =
+                          codec.createInputSurface();
+
+
+                      println(
+                          "Input Surface SUCCESS"
+                      );
+
 
                       codec.start();
 
-                      println("SUCCESS: encoder berhasil start.");
-                      println("");
+
                       println(
-                          "Tahap TEST 2A berhasil."
-                      );
-                      println(
-                          "Encoder menerima konfigurasi HDR10/PQ."
-                      );
-                      println("");
-                      println(
-                          "Belum menghasilkan video HDR final."
+                          "codec.start() SUCCESS"
                       );
 
-                      Thread.sleep(1000);
-
-                  } catch (Throwable e) {
 
                       println("");
-                      println("GAGAL TEST HDR10");
-                      println(e.toString());
+
+                      println(
+                          "================================"
+                      );
+
+                      println(
+                          "TEST HDR10 / PQ BERHASIL"
+                      );
+
+                      println(
+                          "================================"
+                      );
+
+                      println("");
+
+                      println(
+                          "Redmi menerima konfigurasi:"
+                      );
+
+                      println(
+                          "HEVC Main10"
+                      );
+
+                      println(
+                          "BT.2020"
+                      );
+
+                      println(
+                          "ST2084 / PQ"
+                      );
+
+                      println("");
+
+                      println(
+                          "Catatan:"
+                      );
+
+                      println(
+                          "TEST 2 belum membuat video."
+                      );
+
+                      println(
+                          "Ini hanya pengujian encoder."
+                      );
+
+
+                      Thread.sleep(
+                          1000
+                      );
+
+
+                  } catch (
+                      Throwable e
+                  ) {
+
+                      println("");
+
+                      println(
+                          "================================"
+                      );
+
+                      println(
+                          "TEST GAGAL"
+                      );
+
+                      println(
+                          "================================"
+                      );
+
+                      println("");
+
+                      println(
+                          e.toString()
+                      );
 
                   } finally {
 
-                      try {
-                          if (surface != null) {
-                              surface.release();
-                          }
-                      } catch (Throwable ignored) {
-                      }
 
                       try {
-                          if (codec != null) {
+
+                          if (
+                              inputSurface != null
+                          ) {
+
+                              inputSurface.release();
+                          }
+
+                      } catch (
+                          Throwable ignored
+                      ) {
+                      }
+
+
+                      try {
+
+                          if (
+                              codec != null
+                          ) {
+
                               codec.stop();
                           }
-                      } catch (Throwable ignored) {
+
+                      } catch (
+                          Throwable ignored
+                      ) {
                       }
+
 
                       try {
-                          if (codec != null) {
+
+                          if (
+                              codec != null
+                          ) {
+
                               codec.release();
                           }
-                      } catch (Throwable ignored) {
+
+                      } catch (
+                          Throwable ignored
+                      ) {
                       }
 
+
                       println("");
-                      println("=== TES SELESAI ===");
+
+                      println(
+                          "TEST SELESAI."
+                      );
                   }
               }
           }
           EOF
 
-          echo "Android project generated."
 
-      - name: Build APK
-        run: gradle assembleDebug --stacktrace
+          echo "Android project created successfully."
 
+
+      # ============================================================
+      # 7. Build APK
+      # ============================================================
+      - name: Build Debug APK
+        run: |
+          gradle assembleDebug --stacktrace
+
+
+      # ============================================================
+      # 8. Periksa APK
+      # ============================================================
+      - name: Check APK
+        run: |
+          ls -lh app/build/outputs/apk/debug/
+          test -f app/build/outputs/apk/debug/app-debug.apk
+
+
+      # ============================================================
+      # 9. Upload APK
+      # ============================================================
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
